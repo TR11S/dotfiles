@@ -1,0 +1,12 @@
+[Default Applications]
+x-scheme-handler/claude-cli=claude-code-url-handler.desktop
+image/jpeg=swayimg.desktop
+image/png=swayimg.desktop
+application/x-krita=swayimg.desktop
+text/markdown=org.gnome.gitlab.somas.Apostrophe.desktop
+
+[Added Associations]
+image/jpeg=swayimg.desktop;
+image/png=swayimg.desktop;
+application/x-krita=swayimg.desktop;
+text/markdown=micro.desktop;org.gnome.gitlab.somas.Apostrophe.desktop;

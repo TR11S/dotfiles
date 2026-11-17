@@ -1,0 +1,21 @@
+backend = "fastresize"
+color_space = "lch"
+palette = "dark16"
+check_contrast = true
+
+[templates]
+foot = { template = "colors-foot.ini", target = "~/.config/foot/colors.ini" }
+fuzzel = { template = "fuzzel.ini", target = "~/.config/fuzzel/colors.ini" }
+swaylock = { template = "swaylock.conf", target = "~/.config/swaylock/config" }
+mako = { template = "mako", target = "~/.config/mako/colors" }
+mangobar = { template = "mangobar.css", target = "~/.config/mango/mangobar/colors.css" }
+swayimg = { template = "swayimg.lua", target = "~/.config/swayimg/colors.lua" }
+gtk3 = { template = "gtk3-colors.css", target = "~/.config/gtk-3.0/colors.css" }
+
+[hooks]
+# mangobar reads its CSS only at startup, so restart it to apply new colors
+mangobar = 'pkill -x mangobar; sleep 0.1; setsid -f mangobar -c ~/.config/mango/mangobar/config.jsonc -s ~/.config/mango/mangobar/style.css'
+# mako only rereads its config on reload
+mako = 'makoctl reload'
+# GTK3 reloads its theme only when the name changes: bounce it so open apps pick up new colors
+gtk3 = 'gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3-dark; sleep 0.2; gsettings set org.gnome.desktop.interface gtk-theme wallust'

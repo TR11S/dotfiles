@@ -1,0 +1,14 @@
+[Unit]
+Description=MiniCPM5-2B local LLM server (llama.cpp, CPU)
+Documentation=https://huggingface.co/openbmb/MiniCPM5-2B-GGUF
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/minicpm-server
+Restart=on-failure
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,19 @@
+/* wallust template -> ~/.config/mango/mangobar/colors.css
+ * Included from style.css via: @import "colors.css";
+ *
+ * Mapping (dark16 palette):
+ *   bar-bg      background  wallpaper background
+ *   fg          foreground
+ *   fg-dim      color8      muted
+ *   accent      color6      warm accent
+ *   urgent      color1      red
+ */
+
+@define-color bar-bg        {{background}};
+@define-color fg            {{foreground}};
+@define-color fg-dim        {{color8}};
+@define-color accent        {{color6}};
+@define-color urgent        {{color1}};
+@define-color menu-bg       {{background}};
+@define-color menu-hover-bg {{color6}};
+@define-color menu-hover-fg {{background}};

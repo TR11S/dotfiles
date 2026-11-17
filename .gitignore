@@ -1,0 +1,35 @@
+# Allowlist: ignore everything, opt in below
+/*
+!/.gitignore
+!/AGENTS.md
+!/CLAUDE.md
+!/bin/
+!/mango/
+!/foot/
+!/fuzzel/
+!/mako/
+!/swaylock/
+!/swayimg/
+!/wallust/
+!/zsh/
+!/micro/
+!/btop/
+!/helix/
+!/gtk-3.0/
+!/gtk-4.0/
+!/systemd/
+!/mimeapps.list
+
+# wallust-generated (regenerated from wallpaper)
+/foot/colors.ini
+/fuzzel/colors.ini
+/mako/colors
+/mango/mangobar/colors.css
+/swayimg/colors.lua
+/gtk-3.0/colors.css
+/swaylock/config
+
+# state
+/micro/backups/
+/micro/buffers/
+/gtk-3.0/bookmarks

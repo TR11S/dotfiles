@@ -1,0 +1,70 @@
+#!/usr/bin/env zsh
+# edit — find a file anywhere in $HOME and open it in the right editor.
+#
+#   edit a/b | ./x | file   path with a slash, or existing here → open/create it as-is
+#   edit QUERY...           exactly one recently edited file matches → open it directly;
+#                           otherwise fzf picker: recent files first, then the folders below
+#   in the picker           Enter opens · Ctrl+N creates the typed name in the current dir
+#                           (Enter with no match does the same)
+#
+# Needs: zsh, fzf, fd, bat. Recently edited files are remembered in $XDG_STATE_HOME/edit_history.
+
+hist=${XDG_STATE_HOME:-$HOME/.local/state}/edit_history
+# Where to look: whole trees in `roots`, only the top-level files of `shallow`
+# (so ~/.zshenv and fresh downloads are found, but not unpacked archives or app data).
+roots=(Documents Projects Desktop .config .local/bin bin scripts src code dev repos)
+shallow=(. Downloads)
+skip=(.git node_modules __pycache__ .venv .mypy_cache .pytest_cache .ruff_cache target dist build mozilla discord
+      .secrets)
+
+# Editors: Markdown uses md_editor if installed, everything else $EDITOR (or micro)
+editor=${EDITOR:-micro}
+md_editor=edamame
+(( $+commands[$md_editor] )) || md_editor=$editor
+
+# Debian/Ubuntu install fd and bat as fdfind and batcat
+fd=fd;   (( $+commands[fd] ))  || fd=fdfind
+bat=bat; (( $+commands[bat] )) || bat=batcat
+
+open() {  # remember the file, then open it in the right editor
+  mkdir -p ${hist:h}; print -r -- ${1:a} >> $hist
+  case ${1:l} in
+    *.md) exec $md_editor "$1" ;;
+    *)    exec $editor "$1" ;;
+  esac
+}
+
+[[ $1 == */* || -e $1 ]] && open "$1"
+
+# Search from home: paths below are relative to ~ (or absolute for files elsewhere)
+here=$PWD
+cd ~
+
+# Recent files: newest first, no duplicates, still existing
+recent=()
+for f in ${(f)"$(tac $hist 2>/dev/null | awk '!seen[$0]++')"}; do
+  [[ -f $f ]] && recent+=(${f#$HOME/})
+done
+
+if (( $# )); then
+  match=(${(f)"$(print -rl -- $recent | fzf --filter="$*" --exact --scheme=path)"})
+  (( $#match == 1 )) && open $match
+fi
+
+# Picker over recent files, then the folders above (streams in, duplicates dropped)
+out=("${(@f)$( {
+    print -rl -- $recent
+    $fd --type f --follow --hidden ${skip/#/--exclude=} . ${^roots}(N/)
+    $fd --type f --follow --hidden ${skip/#/--exclude=} --max-depth 1 . ${^shallow}(N/) } \
+  | awk '{ sub(/^\.\//, "") } !seen[$0]++ { print; fflush() }' \
+  | fzf --scheme=path --query="$*" --print-query --expect=ctrl-n \
+        --header='Enter: open · Ctrl+N: create new file' \
+        --preview "$bat -n --color=always --line-range=:200 -- {}")}")
+(( $? == 130 )) && exit 1                      # Esc / Ctrl+C
+
+query=$out[1] key=$out[2] pick=$out[3]
+if [[ $key == ctrl-n || -z $pick ]]; then
+  cd $here && [[ -n $query ]] && open "$query"   # new file, in the dir you ran edit from
+else
+  open "$pick"
+fi

@@ -1,0 +1,152 @@
+/* GTK3 structure (Thunar etc.). Colors come from the "wallust" theme
+ * (~/.local/share/themes/wallust -> ~/.config/gtk-3.0/colors.css), so only
+ * named colors are used here: @bg @fg @accent @surface @raised
+ * @border_color @dim_fg @hover_bg @select_bg.
+ * Look: one flat surface, 1px hairlines, square corners, accent used sparingly.
+ * GTK3 reads this file at app start only: restart the app (thunar -q) after edits. */
+
+* {
+  border-radius: 0;
+  -gtk-outline-radius: 0;
+}
+
+/* ── buttons: flat until hovered ─────────────────────────────── */
+button,
+button.flat,
+.toolbar button,
+toolbar button {
+  background: none;
+  border-color: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+button:hover        { background-color: @hover_bg; }
+button:active,
+button:checked      { background-color: @select_bg; }
+
+/* ── toolbar ─────────────────────────────────────────────────── */
+.thunar toolbar,
+toolbar,
+.toolbar {
+  background-color: @surface;
+  border-bottom: 1px solid @border_color;
+  padding: 3px 6px;
+}
+
+/* ── pathbar: plain text crumbs, current dir underlined in accent ── */
+.path-bar,
+.path-bar-button,
+.path-bar button {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.path-bar-button,
+.path-bar button {
+  color: @dim_fg;
+  padding: 2px 6px;
+  border-bottom: 2px solid transparent;
+}
+.path-bar-button:hover,
+.path-bar button:hover   { color: @fg; background-color: @hover_bg; }
+.path-bar-button:checked,
+.path-bar button:checked {
+  color: @fg;
+  background: none;
+  border-bottom-color: @accent;
+}
+/* scroll arrows: faint, and gone when there is nothing to scroll */
+.path-bar button:not(.path-bar-button)          { color: @dim_fg; opacity: 0.6; }
+.path-bar button:not(.path-bar-button):disabled { opacity: 0; }
+
+/* ── entries / search ────────────────────────────────────────── */
+entry {
+  background-color: @bg;
+  border: 1px solid @border_color;
+  box-shadow: none;
+}
+entry:focus {
+  border-color: @accent;
+  box-shadow: none;
+}
+
+/* ── sidebar ─────────────────────────────────────────────────── */
+.sidebar,
+.sidebar .view,
+.sidebar row,
+.thunar .shortcuts-pane,
+.shortcuts-pane treeview {
+  background-color: @surface;
+  border: none;
+}
+.sidebar .view:selected,
+.sidebar row:selected,
+.shortcuts-pane treeview:selected {
+  background-color: @select_bg;
+  color: @fg;
+}
+
+paned > separator {
+  background-color: @border_color;
+  min-width: 1px;
+  min-height: 1px;
+  background-image: none;
+}
+
+/* ── file view: soft accent tint instead of a solid block ────── */
+iconview:selected,
+.view:selected,
+treeview.view:selected,
+.view text:selected,
+.view:selected:focus {
+  background-color: @select_bg;
+  color: @fg;
+}
+
+/* rubber-band selection */
+.view.rubberband,
+rubberband {
+  background-color: alpha(@accent, 0.12);
+  border: 1px solid @accent;
+}
+
+/* ── status bar: quiet ───────────────────────────────────────── */
+statusbar,
+.statusbar {
+  background-color: @surface;
+  border-top: 1px solid @border_color;
+  color: @dim_fg;
+  font-size: 0.9em;
+  padding: 0 4px;
+  min-height: 0;
+}
+
+/* ── menus / popovers: hairline instead of shadow ────────────── */
+menu,
+.menu,
+.context-menu,
+popover {
+  background-color: @raised;
+  border: 1px solid @border_color;
+  box-shadow: none;
+}
+menuitem:hover,
+menu menuitem:hover {
+  background-color: @select_bg;
+  color: @fg;
+}
+
+/* ── scrollbars: thin, low contrast ──────────────────────────── */
+scrollbar slider {
+  background-color: alpha(@fg, 0.25);
+  min-width: 4px;
+  min-height: 4px;
+  border: none;
+}
+scrollbar slider:hover { background-color: alpha(@fg, 0.45); }
+scrollbar,
+scrollbar trough {
+  background: none;
+  border: none;
+}

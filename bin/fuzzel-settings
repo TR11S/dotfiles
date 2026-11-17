@@ -1,0 +1,713 @@
+#!/usr/bin/env bash
+# fuzzel-settings — a minimal system settings menu built on fuzzel's dmenu mode.
+#
+# Usage:  fuzzel-settings [wifi|bluetooth|sound|brightness|appearance|wallpaper|nightlight|time|power]
+#         fuzzel-settings nightlight-toggle    toggle night light (for a keybind)
+#         fuzzel-settings restore              re-apply wallpaper + night light (for autostart)
+#         fuzzel-settings wallpaper-random     pick a random wallpaper (for a keybind)
+#         fuzzel-settings wallpaper-restore    re-apply last wallpaper (for autostart)
+#         (no argument = main menu; the argument jumps straight to a submenu,
+#          handy for keybinds or status-bar click handlers)
+#
+# Everything is optional except fuzzel itself. Entries for tools that aren't
+# installed are hidden, or show a notification explaining what to install:
+#   Wi-Fi          networkmanager        (nmcli)
+#   Bluetooth      bluez, bluez-utils    (bluetoothctl)
+#   Sound          libpulse              (pactl — works with PipeWire via pipewire-pulse)
+#   Brightness     brightnessctl
+#   Appearance     glib2 + dconf         (gsettings)
+#   Wallpaper      awww, vipsthumbnail or ffmpeg (thumbnails)
+#   Night light    wlsunset              (needs wlr-gamma-control from your compositor)
+#   Power profile  power-profiles-daemon
+#   Date & Time    systemd               (timedatectl; needs a polkit agent running)
+#   Notifications  libnotify             (notify-send)
+
+set -u
+
+# ── Edit these for your setup ────────────────────────────────────────────────
+LOCK_CMD='swaylock -f'
+# shellcheck disable=SC2016  # evaluated later by bash -c, on purpose
+LOGOUT_CMD='loginctl terminate-session "${XDG_SESSION_ID:-}"'
+#   compositor-specific alternatives:
+#   'swaymsg exit'  |  'hyprctl dispatch exit'  |  'niri msg action quit'
+MAX_LINES=10
+WALLPAPER_DIR="${WALLPAPER_DIR:-$HOME/Pictures/Wallpapers}"   # searched recursively
+TRANSITIONS=(simple left right top bottom center outer wipe any random)   # see: awww img --help
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fuzzel-settings"
+THUMB_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/fuzzel-settings/thumbs"
+NIGHT_LAT=""   # optional, e.g. 39.9 — set BOTH to enable the
+NIGHT_LON=""   # "Automatic (sunset → sunrise)" night-light mode, e.g. 116.3
+# ─────────────────────────────────────────────────────────────────────────────
+
+BACK="← Back"
+WALLPAPER_DIR=${WALLPAPER_DIR%/}
+
+have()   { command -v "$1" >/dev/null 2>&1; }
+# remembered settings: state_get KEY [DEFAULT] / state_set KEY VALUE
+state_get() { local v; read -r v 2>/dev/null < "$STATE_DIR/$1"; printf '%s\n' "${v:-${2:-}}"; }
+state_set() { mkdir -p "$STATE_DIR" && printf '%s\n' "$2" > "$STATE_DIR/$1"; }
+notify() { have notify-send && notify-send -a Settings -t 3500 "$1" "${2:-}"; return 0; }
+
+# ── fuzzel wrappers ──────────────────────────────────────────────────────────
+
+# menu PROMPT [extra fuzzel args]   — entries on stdin, selection on stdout.
+# Look & feel comes from your normal ~/.config/fuzzel/fuzzel.ini.
+# Window height shrinks to fit short lists. Esc → exit status 1.
+menu() {
+  local prompt=$1; shift
+  local -a entries
+  mapfile -t entries
+  local n=${#entries[@]}
+  (( n )) || return 1
+  printf '%s\n' "${entries[@]}" |
+    fuzzel --dmenu --prompt "$prompt › " --lines $(( n < MAX_LINES ? n : MAX_LINES )) "$@"
+}
+
+# pick PROMPT ITEM...
+pick() { local p=$1; shift; printf '%s\n' "$@" | menu "$p"; }
+
+# pick_cur PROMPT CURRENT ITEM... — like pick, but tags CURRENT; prints the chosen index
+pick_cur() {
+  local p=$1 cur=$2 i; shift 2
+  local -a labels=()
+  for i; do [[ $i == "$cur" ]] && labels+=("$i  ·  current") || labels+=("$i"); done
+  printf '%s\n' "${labels[@]}" | menu "$p" --index
+}
+
+# ask_password PROMPT — masked input, no list
+ask_password() {
+  fuzzel --dmenu --password --lines 0 --prompt "$1 › " </dev/null
+}
+
+# ── Wi-Fi (NetworkManager) ───────────────────────────────────────────────────
+
+wifi_dev() { nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}'; }
+
+wifi_menu() {
+  have nmcli || { notify "Wi-Fi" "nmcli not found — install networkmanager"; return; }
+  while true; do
+    local radio ssid choice
+    local -a items=()
+    radio=$(nmcli radio wifi)
+    if [[ $radio == enabled ]]; then
+      ssid=$(nmcli -t -f active,ssid device wifi 2>/dev/null | sed -n 's/^yes://{p;q}')
+      ssid=${ssid//\\:/:}
+      items=("Connect to network…")
+      [[ -n $ssid ]] && items+=("Disconnect from $ssid")
+      items+=("Forget saved network…" "Turn Wi-Fi off")
+    else
+      items=("Turn Wi-Fi on")
+    fi
+    have nm-connection-editor && items+=("Advanced…")
+    items+=("$BACK")
+
+    choice=$(pick "Wi-Fi" "${items[@]}") || return
+    case $choice in
+      "Connect to network…")  wifi_connect ;;
+      Disconnect*)            nmcli device disconnect "$(wifi_dev)" >/dev/null 2>&1 ;;
+      "Forget saved network…") wifi_forget ;;
+      "Turn Wi-Fi off")       nmcli radio wifi off ;;
+      "Turn Wi-Fi on")        nmcli radio wifi on; sleep 1 ;;
+      "Advanced…")            setsid -f nm-connection-editor >/dev/null 2>&1; exit 0 ;;
+      "$BACK")                return ;;
+    esac
+  done
+}
+
+wifi_connect() {
+  notify "Wi-Fi" "Looking for networks…"
+  local -a ssids=() secs=() labels=()
+  local seen=$'\n' sig sec ssid
+  # SIGNAL,SECURITY,SSID — SSID goes last because it can contain ':' (escaped as '\:')
+  while IFS=: read -r sig sec ssid; do
+    ssid=${ssid//\\:/:}
+    [[ -n $ssid ]] || continue
+    [[ $seen == *$'\n'"$ssid"$'\n'* ]] && continue      # keep strongest AP per SSID
+    seen+="$ssid"$'\n'
+    ssids+=("$ssid"); secs+=("$sec")
+    labels+=("$ssid  ·  ${sig}%  ·  ${sec/#--/Open}")
+  done < <(nmcli -t -f SIGNAL,SECURITY,SSID device wifi list 2>/dev/null | sort -t: -k1,1nr)
+
+  (( ${#ssids[@]} )) || { notify "Wi-Fi" "No networks found"; return; }
+
+  local idx out pw=""
+  idx=$(printf '%s\n' "${labels[@]}" | menu "Network" --index) || return
+  ssid=${ssids[idx]}; sec=${secs[idx]}
+
+  local -a cmd=(nmcli connection up id "$ssid")
+  local fresh=0
+  if ! nmcli -t -f NAME connection show | sed 's/\\:/:/g' | grep -Fxq -- "$ssid"; then
+    fresh=1     # no saved profile yet
+    if [[ -n $sec && $sec != "--" ]]; then
+      pw=$(ask_password "Password for $ssid") || return
+    fi
+    # (the password is briefly visible in `ps`; fine on a single-user machine)
+    cmd=(nmcli device wifi connect "$ssid" ${pw:+password "$pw"})
+  fi
+  if out=$("${cmd[@]}" 2>&1); then
+    notify "Wi-Fi" "Connected to $ssid"
+  else
+    (( fresh )) && nmcli connection delete id "$ssid" >/dev/null 2>&1   # drop half-created profile
+    notify "Wi-Fi" "Couldn't connect to $ssid" "$out"
+  fi
+}
+
+wifi_forget() {
+  local -a saved=()
+  mapfile -t saved < <(nmcli -t -f TYPE,NAME connection show | sed -n 's/^802-11-wireless://p' | sed 's/\\:/:/g')
+  (( ${#saved[@]} )) || { notify "Wi-Fi" "No saved networks"; return; }
+  local name
+  name=$(printf '%s\n' "${saved[@]}" | menu "Forget") || return
+  nmcli connection delete id "$name" >/dev/null 2>&1 && notify "Wi-Fi" "Forgot $name"
+}
+
+# ── Bluetooth (BlueZ) ────────────────────────────────────────────────────────
+
+bt_menu() {
+  have bluetoothctl || { notify "Bluetooth" "bluetoothctl not found — install bluez-utils"; return; }
+  while true; do
+    local powered choice
+    local -a items=()
+    powered=$(bluetoothctl show 2>/dev/null | awk '/Powered:/{print $2}')
+    [[ -n $powered ]] || { notify "Bluetooth" "No Bluetooth adapter found"; return; }
+    if [[ $powered == yes ]]; then
+      items=("Paired devices…" "Pair new device…" "Turn Bluetooth off")
+    else
+      items=("Turn Bluetooth on")
+    fi
+    items+=("$BACK")
+
+    choice=$(pick "Bluetooth" "${items[@]}") || return
+    case $choice in
+      "Paired devices…")     bt_paired ;;
+      "Pair new device…")    bt_pair ;;
+      "Turn Bluetooth off")  bluetoothctl power off >/dev/null ;;
+      "Turn Bluetooth on")   rfkill unblock bluetooth 2>/dev/null; bluetoothctl power on >/dev/null; sleep 1 ;;
+      "$BACK")               return ;;
+    esac
+  done
+}
+
+bt_paired() {
+  local -a macs=() labels=()
+  local kind mac name state
+  while read -r kind mac name; do
+    [[ -n $mac ]] || continue
+    if bluetoothctl info "$mac" 2>/dev/null | grep -q 'Connected: yes'; then
+      state="connected"
+    else
+      state="not connected"
+    fi
+    macs+=("$mac"); labels+=("$name  ·  $state")
+  done < <(bluetoothctl devices Paired 2>/dev/null || bluetoothctl paired-devices 2>/dev/null)
+
+  (( ${#macs[@]} )) || { notify "Bluetooth" "No paired devices"; return; }
+
+  local idx out
+  idx=$(printf '%s\n' "${labels[@]}" | menu "Device" --index) || return
+  mac=${macs[idx]}; name=${labels[idx]%%  ·  *}
+
+  if [[ ${labels[idx]} == *"  ·  connected" ]]; then
+    bluetoothctl disconnect "$mac" >/dev/null 2>&1
+    notify "Bluetooth" "Disconnected from $name"
+  else
+    out=$(bluetoothctl connect "$mac" 2>&1)
+    if [[ $out == *"Connection successful"* ]]; then
+      notify "Bluetooth" "Connected to $name"
+    else
+      notify "Bluetooth" "Couldn't connect to $name" "$(tail -n1 <<<"$out")"
+    fi
+  fi
+}
+
+bt_pair() {
+  notify "Bluetooth" "Scanning for 8 seconds…"
+  bluetoothctl --timeout 8 scan on >/dev/null 2>&1
+  local paired kind mac name idx out
+  local -a macs=() labels=()
+  paired=$(bluetoothctl devices Paired 2>/dev/null)
+  while read -r kind mac name; do
+    [[ $kind == Device && -n $mac ]] || continue
+    [[ $paired == *"$mac"* ]] && continue
+    [[ $name == "${mac//:/-}" ]] && continue            # skip unnamed devices
+    macs+=("$mac"); labels+=("$name")
+  done < <(bluetoothctl devices 2>/dev/null)
+
+  (( ${#macs[@]} )) || { notify "Bluetooth" "No new devices found" "Put the device in pairing mode and try again"; return; }
+
+  idx=$(printf '%s\n' "${labels[@]}" | menu "Pair" --index) || return
+  mac=${macs[idx]}; name=${labels[idx]}
+  out=$(bluetoothctl pair "$mac" 2>&1)
+  if [[ $out == *"Pairing successful"* ]]; then
+    bluetoothctl trust "$mac"   >/dev/null 2>&1
+    bluetoothctl connect "$mac" >/dev/null 2>&1
+    notify "Bluetooth" "Paired with $name"
+  else
+    notify "Bluetooth" "Pairing with $name failed" "Devices that need a PIN: use bluetoothctl or blueman"
+  fi
+}
+
+# ── Sound (pactl: PulseAudio or PipeWire-pulse) ──────────────────────────────
+
+sound_menu() {
+  have pactl || { notify "Sound" "pactl not found — install libpulse (and pipewire-pulse)"; return; }
+  while true; do
+    local vol mute mic choice
+    vol=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oE '[0-9]+%' | head -n1)
+    mute=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | awk '{print $2}')
+    mic=$(pactl get-source-mute @DEFAULT_SOURCE@ 2>/dev/null | awk '{print $2}')
+    local -a items=(
+      "Volume  ·  ${vol:-?}$([[ $mute == yes ]] && echo '  (muted)')"
+      "$([[ $mute == yes ]] && echo Unmute || echo Mute) speakers"
+      "$([[ $mic  == yes ]] && echo Unmute || echo Mute) microphone"
+      "Output device…"
+      "Input device…"
+    )
+    have pavucontrol && items+=("Open mixer")
+    items+=("$BACK")
+
+    choice=$(pick "Sound" "${items[@]}") || return
+    case $choice in
+      Volume*)           volume_set ;;
+      *speakers)         pactl set-sink-mute   @DEFAULT_SINK@   toggle ;;
+      *microphone)       pactl set-source-mute @DEFAULT_SOURCE@ toggle ;;
+      "Output device…")  audio_device sink ;;
+      "Input device…")   audio_device source ;;
+      "Open mixer")      setsid -f pavucontrol >/dev/null 2>&1; exit 0 ;;
+      "$BACK")           return ;;
+    esac
+  done
+}
+
+volume_set() {
+  local v
+  v=$(printf '%s\n' 100% 90% 80% 70% 60% 50% 40% 30% 20% 10% 0% | menu "Volume") || return
+  pactl set-sink-volume @DEFAULT_SINK@ "$v"
+}
+
+# audio_device sink|source — choose default device and move running streams to it
+audio_device() {
+  local kind=$1 title cur name desc idx target streams mv_cmd id
+  local -a names=() labels=()
+  [[ $kind == sink ]] && title=Output || title=Input
+  cur=$(pactl "get-default-$kind" 2>/dev/null)
+
+  while IFS=$'\t' read -r name desc; do
+    names+=("$name")
+    if [[ $name == "$cur" ]]; then labels+=("$desc  ·  current"); else labels+=("$desc"); fi
+  done < <(pactl list "${kind}s" | awk '
+      /^\tName: /        { n = substr($0, 8) }
+      /^\tDescription: / { if (n !~ /\.monitor$/) print n "\t" substr($0, 15) }')
+
+  (( ${#names[@]} )) || { notify "Sound" "No ${title,,} devices found"; return; }
+
+  idx=$(printf '%s\n' "${labels[@]}" | menu "$title" --index) || return
+  target=${names[idx]}
+  pactl "set-default-$kind" "$target"
+
+  case $kind in
+    sink)   streams=sink-inputs;    mv_cmd=move-sink-input ;;
+    source) streams=source-outputs; mv_cmd=move-source-output ;;
+  esac
+  while read -r id; do
+    [[ -n $id ]] && pactl "$mv_cmd" "$id" "$target" 2>/dev/null
+  done < <(pactl list short "$streams" | cut -f1)
+
+  notify "Sound" "$title: ${labels[idx]%%  ·  *}"
+}
+
+# ── Brightness / display ─────────────────────────────────────────────────────
+
+brightness_menu() {
+  have brightnessctl || { notify "Brightness" "brightnessctl not found"; return; }
+  local cur choice
+  cur=$(brightnessctl -c backlight -m 2>/dev/null | cut -d, -f4)
+  [[ -n $cur ]] || { notify "Brightness" "No backlight device found"; return; }
+  choice=$(printf '%s\n' 100% 90% 80% 70% 60% 50% 40% 30% 20% 10% 5% | menu "Brightness ($cur)") || return
+  brightnessctl -c backlight set "$choice" >/dev/null
+}
+
+# ── Appearance (dark / light, via the freedesktop color-scheme setting) ──────
+
+appearance_menu() {
+  have gsettings || { notify "Appearance" "gsettings not found — install glib2 and dconf"; return; }
+  local cur=Light idx
+  [[ $(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null) == *dark* ]] && cur=Dark
+  idx=$(pick_cur "Appearance" "$cur" Dark Light) || return
+  gsettings set org.gnome.desktop.interface color-scheme "$( ((idx == 0)) && echo prefer-dark || echo prefer-light)"
+}
+
+# ── Wallpaper (awww) ─────────────────────────────────────────────────────────
+# Remembers your last wallpaper and transition in $STATE_DIR. awww itself forgets
+# everything when the daemon restarts, so autostart this once from your compositor:
+#   fuzzel-settings wallpaper-restore
+
+# Make sure awww-daemon is running (start it and wait up to 3 s if not)
+wp_daemon() {
+  local tries=30
+  awww query >/dev/null 2>&1 && return 0
+  setsid -f awww-daemon >/dev/null 2>&1
+  while (( tries-- > 0 )); do
+    awww query >/dev/null 2>&1 && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+# Regenerate terminal colors from the wallpaper (runs in background so the menu returns instantly)
+wp_colors() {
+  have wallust || return 0
+  setsid -f wallust run "$1" >/dev/null 2>&1
+}
+
+# wp_apply IMAGE [extra awww img args]
+wp_apply() {
+  local img=$1 tr out; shift
+  wp_daemon || { notify "Wallpaper" "Couldn't start awww-daemon"; return 1; }
+  tr=$(state_get transition simple)
+  if out=$(awww img --transition-type "$tr" "$@" "$img" 2>&1); then
+    state_set wallpaper "$img"
+    wp_colors "$img"
+  else
+    notify "Wallpaper" "awww failed" "$out"
+    return 1
+  fi
+}
+
+wp_files() {
+  find -L "$WALLPAPER_DIR" -type f \( \
+      -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.webp' \
+      -o -iname '*.bmp' -o -iname '*.tga' -o -iname '*.tif' -o -iname '*.tiff' -o -iname '*.svg' \
+      -o -iname '*.avif' -o -iname '*.jxl' \) -printf '%P\n' 2>/dev/null | sort
+}
+
+# wp_thumb REL_PATH — print the cached thumbnail path, creating it if missing/stale
+wp_thumb() {
+  local src=$WALLPAPER_DIR/$1 dst=$THUMB_DIR/${1//[^A-Za-z0-9._-]/_}.png tmp
+  if [[ ! $dst -nt $src ]]; then
+    mkdir -p "$THUMB_DIR"; tmp=${dst%.png}.tmp.png   # vips picks the format from the extension
+    if have vipsthumbnail; then
+      vipsthumbnail "$src" -s 128x128 -c -o "$tmp" >/dev/null 2>&1
+    elif have ffmpeg; then
+      ffmpeg -y -loglevel error -i "$src" -frames:v 1 \
+        -vf scale=128:128:force_original_aspect_ratio=increase,crop=128:128 "$tmp" >/dev/null 2>&1
+    fi
+    [[ -s $tmp ]] && mv -f "$tmp" "$dst" || rm -f "$tmp"
+  fi
+  [[ -s $dst ]] && printf '%s\n' "$dst"
+}
+
+wp_choose() {
+  local -a files=()
+  local f i n=0 cur sel=0 label thumb idx
+  mapfile -t files < <(wp_files)
+  (( ${#files[@]} )) || { notify "Wallpaper" "No images found in $WALLPAPER_DIR"; return; }
+  cur=$(state_get wallpaper)
+
+  # Build missing thumbnails first, 8 at a time
+  for f in "${files[@]}"; do
+    wp_thumb "$f" >/dev/null &
+    (( ++n % 8 )) || wait
+  done
+  wait
+
+  for i in "${!files[@]}"; do [[ $WALLPAPER_DIR/${files[i]} == "$cur" ]] && sel=$i; done
+
+  # fuzzel shows an icon for entries written as:  text\0icon\x1fPATH
+  # (menu() can't be used here: bash arrays drop the NUL byte). Icons are off in
+  # fuzzel.ini, hence the override.
+  # Build the whole list first: if fuzzel receives entries slowly it applies
+  # --select-index before they all arrive ("couldn't select entry at index N").
+  local entries=""
+  for i in "${!files[@]}"; do
+    label=${files[i]}; [[ $WALLPAPER_DIR/$label == "$cur" ]] && label+="  ·  current"
+    if thumb=$(wp_thumb "${files[i]}"); then
+      entries+=$(printf '%s\x01icon\x1f%s\n' "$label" "$thumb")$'\n'
+    else
+      entries+="$label"$'\n'
+    fi
+  done
+  idx=$(printf '%s' "$entries" | tr '\001' '\000' | fuzzel --dmenu --index --select-index "$sel" --override=main.icons-enabled=yes \
+           --prompt "Wallpaper › " --lines "$MAX_LINES") || return
+  wp_apply "$WALLPAPER_DIR/${files[idx]}"
+}
+
+wp_random() {
+  have awww || { notify "Wallpaper" "awww not found"; return 1; }
+  local f
+  f=$(wp_files | shuf -n1)
+  [[ -n $f ]] || { notify "Wallpaper" "No images found in $WALLPAPER_DIR"; return 1; }
+  wp_apply "$WALLPAPER_DIR/$f"
+}
+
+wp_set_transition() {
+  local idx
+  idx=$(pick_cur "Transition" "$(state_get transition simple)" "${TRANSITIONS[@]}") || return
+  state_set transition "${TRANSITIONS[idx]}"
+}
+
+# Called from compositor autostart: re-apply the last wallpaper, instantly
+wp_restore() {
+  have awww || return 0
+  local img
+  img=$(state_get wallpaper)
+  [[ -f $img ]] || return 0
+  wp_apply "$img" --transition-step 255
+}
+
+wallpaper_menu() {
+  have awww || { notify "Wallpaper" "awww not found"; return; }
+  while true; do
+    local tr choice
+    tr=$(state_get transition simple)
+    choice=$(pick "Wallpaper" "Choose wallpaper…" "Random wallpaper" "Transition  ·  $tr" "$BACK") || return
+    case $choice in
+      "Choose wallpaper…") wp_choose ;;
+      "Random wallpaper")  wp_random ;;
+      "Transition"*)       wp_set_transition ;;
+      "$BACK")             return ;;
+    esac
+  done
+}
+
+# ── Night light (wlsunset) ───────────────────────────────────────────────────
+# wlsunset has no remote control, so changes are applied by restarting it with
+# new flags. Modes:
+#   Scheduled — warm between two times you choose (default 20:00 → 07:00)
+#   Always on — constant warm color temperature
+#   Automatic — follows sunset/sunrise (only if NIGHT_LAT and NIGHT_LON are set)
+# Settings and on/off state are remembered; autostart with:
+#   fuzzel-settings restore
+
+nl_running() { pgrep -u "$UID" -x wlsunset >/dev/null; }
+
+nl_stop() {
+  local tries=20
+  pkill -u "$UID" -x wlsunset 2>/dev/null
+  while nl_running && (( tries-- > 0 )); do sleep 0.05; done
+  return 0
+}
+
+nl_start() {
+  local mode temp evening morning
+  local -a args
+  mode=$(state_get nl_mode scheduled)
+  temp=$(state_get nl_temp 4000)
+  evening=$(state_get nl_evening 20:00)
+  morning=$(state_get nl_morning 07:00)
+
+  case $mode in
+    always)    args=(-t "$temp" -T $(( temp + 1 )) -S 07:00 -s 19:00) ;;  # high≈low → constant
+    automatic) args=(-t "$temp" -l "$NIGHT_LAT" -L "$NIGHT_LON") ;;
+    *)         args=(-t "$temp" -S "$morning" -s "$evening") ;;
+  esac
+
+  nl_stop
+  mkdir -p "$STATE_DIR"
+  setsid -f wlsunset "${args[@]}" >/dev/null 2>"$STATE_DIR/wlsunset.log"
+  sleep 0.4
+  if nl_running; then
+    return 0
+  fi
+  state_set nl_on off
+  notify "Night light" "wlsunset exited" "$(tail -n1 "$STATE_DIR/wlsunset.log" 2>/dev/null)"
+  return 1
+}
+
+nl_on()  { state_set nl_on on;  nl_start && notify "Night light" "On · $(state_get nl_temp 4000)K"; }
+nl_off() { state_set nl_on off; nl_stop;  notify "Night light" "Off"; }
+
+nl_toggle() {
+  have wlsunset || { notify "Night light" "wlsunset not found — install wlsunset"; return 1; }
+  if nl_running; then nl_off; else nl_on; fi
+}
+
+nl_restore() {
+  have wlsunset || return 0
+  if [[ $(state_get nl_on off) == on ]]; then nl_start; fi
+  return 0
+}
+
+nl_apply_if_running() { if nl_running; then nl_start; fi; }
+
+# time_list START_HOUR HALF_HOUR_STEPS
+time_list() {
+  local i
+  for (( i = 0; i < $2; i++ )); do
+    printf '%02d:%02d\n' $(( ($1 + i / 2) % 24 )) $(( (i % 2) * 30 ))
+  done
+}
+
+nl_pick_mode() {
+  local choice mode
+  local -a items=("Scheduled" "Always on")
+  [[ -n $NIGHT_LAT && -n $NIGHT_LON ]] && items+=("Automatic (sunset → sunrise)")
+  choice=$(printf '%s\n' "${items[@]}" | menu "Mode") || return
+  case $choice in
+    Scheduled)   mode=scheduled ;;
+    "Always on") mode=always ;;
+    Automatic*)  mode=automatic ;;
+  esac
+  state_set nl_mode "$mode"
+  nl_apply_if_running
+}
+
+nl_pick_temp() {
+  local idx
+  local -a temps=(5000K 4500K 4000K 3500K 3000K 2500K)
+  idx=$(pick_cur "Temperature" "$(state_get nl_temp 4000)K" "${temps[@]}") || return
+  state_set nl_temp "${temps[idx]%K}"
+  nl_apply_if_running
+}
+
+nl_pick_schedule() {
+  local e m
+  e=$(time_list 17 20 | menu "Turn on at") || return
+  state_set nl_evening "$e"
+  m=$(time_list 4 16 | menu "Turn off at") || { nl_apply_if_running; return; }
+  state_set nl_morning "$m"
+  nl_apply_if_running
+}
+
+nightlight_menu() {
+  have wlsunset || { notify "Night light" "wlsunset not found — install wlsunset"; return; }
+  while true; do
+    local mode label choice
+    local -a items=()
+    mode=$(state_get nl_mode scheduled)
+    case $mode in
+      always)    label="Always on" ;;
+      automatic) label="Automatic" ;;
+      *)         label="Scheduled"; mode=scheduled ;;
+    esac
+    if nl_running; then items+=("Turn off"); else items+=("Turn on"); fi
+    items+=("Mode  ·  $label" "Temperature  ·  $(state_get nl_temp 4000)K")
+    [[ $mode == scheduled ]] && items+=("Schedule  ·  $(state_get nl_evening 20:00) → $(state_get nl_morning 07:00)")
+    items+=("$BACK")
+
+    choice=$(pick "Night light" "${items[@]}") || return
+    case $choice in
+      "Turn on")      nl_on ;;
+      "Turn off")     nl_off ;;
+      Mode*)          nl_pick_mode ;;
+      Temperature*)   nl_pick_temp ;;
+      Schedule*)      nl_pick_schedule ;;
+      "$BACK")        return ;;
+    esac
+  done
+}
+
+# ── Date & Time ──────────────────────────────────────────────────────────────
+
+datetime_menu() {
+  have timedatectl || { notify "Date & Time" "timedatectl not found"; return; }
+  while true; do
+    local ntp tz choice out z want
+    ntp=$(timedatectl show -p NTP --value 2>/dev/null)
+    tz=$(timedatectl show -p Timezone --value 2>/dev/null)
+    choice=$(pick "Date & Time" \
+      "Time zone  ·  $tz" \
+      "Automatic time sync  ·  $([[ $ntp == yes ]] && echo on || echo off)" \
+      "$BACK") || return
+    case $choice in
+      "Time zone"*)
+        z=$(timedatectl list-timezones | menu "Time zone") || continue
+        out=$(timedatectl set-timezone "$z" 2>&1) || notify "Time zone" "$out" ;;
+      "Automatic time"*)
+        want=true; [[ $ntp == yes ]] && want=false
+        out=$(timedatectl set-ntp "$want" 2>&1) || notify "Time sync" "$out" ;;
+      "$BACK") return ;;
+    esac
+  done
+}
+
+# ── Power & session ──────────────────────────────────────────────────────────
+
+profile_menu() {
+  local idx
+  local -a profiles=()
+  mapfile -t profiles < <(powerprofilesctl list 2>/dev/null | sed -nE 's/^[* ] ([a-z-]+):$/\1/p')
+  (( ${#profiles[@]} )) || { notify "Power" "No power profiles available"; return; }
+  idx=$(pick_cur "Profile" "$(powerprofilesctl get 2>/dev/null)" "${profiles[@]}") || return
+  powerprofilesctl set "${profiles[idx]}"
+}
+
+power_menu() {
+  while true; do
+    local choice profile
+    local -a items=()
+    profile=$(powerprofilesctl get 2>/dev/null)
+    [[ -n $profile ]] && items+=("Power profile  ·  $profile")
+    items+=("Lock" "Suspend" "Log out" "Reboot" "Shut down" "$BACK")
+
+    choice=$(pick "Power" "${items[@]}") || return
+    case $choice in
+      "Power profile"*) profile_menu ;;
+      Lock)             setsid -f bash -c "$LOCK_CMD" >/dev/null 2>&1; exit 0 ;;
+      Suspend)          systemctl suspend; exit 0 ;;
+      "Log out")        bash -c "$LOGOUT_CMD"; exit 0 ;;
+      Reboot)           systemctl reboot; exit 0 ;;
+      "Shut down")      systemctl poweroff; exit 0 ;;
+      "$BACK")          return ;;
+    esac
+  done
+}
+
+# ── Main menu ────────────────────────────────────────────────────────────────
+
+main() {
+  local display_tool="" t choice
+  for t in wdisplays nwg-displays; do
+    have "$t" && { display_tool=$t; break; }
+  done
+
+  while true; do
+    local -a items=("Wi-Fi")
+    have bluetoothctl && items+=("Bluetooth")
+    items+=("Sound")
+    have brightnessctl && items+=("Brightness")
+    [[ -n $display_tool ]] && items+=("Display layout")
+    items+=("Appearance")
+    have awww && items+=("Wallpaper")
+    if have wlsunset; then
+      if nl_running; then items+=("Night light  ·  on"); else items+=("Night light  ·  off"); fi
+    fi
+    items+=("Date & Time" "Power")
+
+    choice=$(pick "Settings" "${items[@]}") || exit 0
+    case $choice in
+      Wi-Fi)             wifi_menu ;;
+      Bluetooth)         bt_menu ;;
+      Sound)             sound_menu ;;
+      Brightness)        brightness_menu ;;
+      "Display layout")  setsid -f "$display_tool" >/dev/null 2>&1; exit 0 ;;
+      Appearance)        appearance_menu ;;
+      Wallpaper)         wallpaper_menu ;;
+      "Night light"*)    nightlight_menu ;;
+      "Date & Time")     datetime_menu ;;
+      Power)             power_menu ;;
+    esac
+  done
+}
+
+have fuzzel || { echo "fuzzel not found" >&2; exit 1; }
+
+case "${1:-}" in
+  "")                 main ;;
+  wifi|network)       wifi_menu ;;
+  bluetooth|bt)       bt_menu ;;
+  sound|audio|volume) sound_menu ;;
+  brightness)         brightness_menu ;;
+  appearance|theme)   appearance_menu ;;
+  wallpaper)          wallpaper_menu ;;
+  wallpaper-random)   wp_random ;;
+  wallpaper-set)      wp_apply "$(realpath "$2")" ;;
+  wallpaper-restore)  wp_restore ;;
+  nightlight|night)   nightlight_menu ;;
+  nightlight-toggle)  nl_toggle ;;
+  nightlight-restore) nl_restore ;;
+  restore)            wp_restore; nl_restore ;;
+  time|date)          datetime_menu ;;
+  power)              power_menu ;;
+  *) echo "usage: ${0##*/} [wifi|bluetooth|sound|brightness|appearance|wallpaper|wallpaper-set IMAGE|nightlight|time|power]" >&2; exit 2 ;;
+esac

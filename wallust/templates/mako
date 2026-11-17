@@ -1,0 +1,23 @@
+# wallust template -> ~/.config/mako/colors
+# Included from ~/.config/mako/config via: include=~/.config/mako/colors
+# Colors are #RRGGBBAA.
+#
+# Mapping (dark16 palette), same as fuzzel/swaylock:
+#   background   wallpaper background
+#   text         foreground
+#   border       color4   -- same accent as the fuzzel border / swaylock ring
+#   progress     color6   -- warm accent
+#   low          color8   -- muted
+#   high         color9   -- same as swaylock "wrong"
+
+background-color={{background}}ff
+text-color={{foreground}}ff
+border-color={{color4}}ff
+progress-color=over {{color6}}ff
+
+[urgency=low]
+border-color={{color8}}ff
+text-color={{color8}}ff
+
+[urgency=high]
+border-color={{color9}}ff

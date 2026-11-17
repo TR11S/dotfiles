@@ -1,0 +1,107 @@
+/* =========================================================
+ * mangobar — minimal thin bar
+ * Colors come from the wallpaper via wallust (colors.css).
+ * ========================================================= */
+
+@import "colors.css";
+
+/* ==================== Reset: flat, no pills ==================== */
+* {
+    font-family: "Maple Mono NF CN", "Symbols Nerd Font Mono", monospace;
+    font-size: 13px;
+    font-weight: normal;
+    color: @fg;
+    background-color: @bar-bg;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    text-shadow: none;
+    padding: 0px 8px;
+    margin: 0px;
+    min-height: 0;
+}
+
+/* ==================== Bar ==================== */
+#bar,
+#bar.sel {
+    background-color: @bar-bg;
+    padding: 0px;
+    margin: 0px;
+}
+
+/* ==================== Workspaces ==================== */
+#tags {
+    padding: 0px 6px;
+    color: @fg-dim;
+    background-color: @bar-bg;
+    border-bottom: 2px solid transparent;
+}
+#tags.empty    { color: @fg-dim; background-color: @bar-bg; }
+#tags.occupied { color: @fg; background-color: @bar-bg; }
+#tags:hover    { color: @accent; background-color: @bar-bg; }
+#tags.active {
+    color: @accent;
+    background-color: @bar-bg;
+    border-bottom: 2px solid @accent;
+}
+#tags.urgent {
+    color: @urgent;
+    background-color: @bar-bg;
+    border-bottom: 2px solid @urgent;
+}
+
+#overview {
+    color: @accent;
+    background-color: @bar-bg;
+}
+
+/* ==================== Left side ==================== */
+#layout {
+    color: @fg-dim;
+    background-color: @bar-bg;
+    min-width: 0;
+}
+#title {
+    color: @fg;
+    background-color: @bar-bg;
+}
+
+/* ==================== Right side ==================== */
+#clock,
+#clock.date,
+#cpu,
+#mem,
+#brightness,
+#volume,
+#network,
+#battery,
+#keymode,
+#keyboardlayout,
+#custom-power {
+    color: @fg;
+    background-color: @bar-bg;
+}
+
+#tray {
+    padding: 0px 8px;
+    background-color: @bar-bg;
+}
+
+/* ==================== Menus (tray / context) ==================== */
+menu {
+    background-color: @bar-bg;
+    border: 1px solid @fg-dim;
+    border-radius: 0;
+    font-size: 12px;
+    padding: 0;
+    margin: 0;
+}
+menuitem {
+    color: @fg;
+    background-color: @bar-bg;
+    padding: 2px 10px;
+}
+menuitem:hover {
+    color: @menu-hover-fg;
+    background-color: @menu-hover-bg;
+}

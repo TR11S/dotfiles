@@ -1,0 +1,37 @@
+theme = "base16_terminal"
+
+[editor]
+# line-number = "relative"
+mouse = true
+cursorline = true
+color-modes = true
+bufferline = "multiple"
+true-color = true
+scrolloff = 5
+idle-timeout = 100
+completion-trigger-len = 1
+
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
+
+[editor.statusline]
+left = ["mode", "spinner", "file-name", "file-modification-indicator"]
+right = ["diagnostics", "selections", "position", "file-encoding", "file-type"]
+
+[editor.indent-guides]
+render = true
+
+[editor.file-picker]
+hidden = false
+
+[editor.lsp]
+display-messages = true
+
+[keys.insert]
+j = { k = "normal_mode" }
+
+[keys.normal]
+C-s = ":w"
+space.q = ":q"
