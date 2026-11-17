@@ -1,7 +1,7 @@
 # ~/.config/zsh/.zshrc — interactive zsh config (found via ZDOTDIR in ~/.zshenv)
 
 # --- Environment -------------------------------------------------------------
-export EDITOR=helix
+export EDITOR=micro
 export NNN_OPTS="eH"                  	# type-to-nav + show hidden files
 typeset -U path                      	# keep PATH free of duplicates
 path=(~/.pi/agent/bin ~/.local/bin $path)
