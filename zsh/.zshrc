@@ -134,6 +134,17 @@ add-zsh-hook chpwd _auto_ls
 # edit: fuzzy-find & open any file in $HOME → ~/.local/bin/edit
 alias e='edit'
 
+# cfg: commit & push all ~/.config changes.  Usage: cfg [message]
+# Without a message, it names the changed dirs, e.g. "update: mango zsh".
+cfg() {
+  local -a g=(git -C ~/.config)
+  local changes=$($g status --porcelain)
+  [[ -z $changes ]] && { echo "config: nothing to commit"; return }
+  $g status --short
+  local msg=${*:-"update: $(print -r -- $changes | awk '{print $2}' | cut -d/ -f1 | sort -u | paste -sd' ')"}
+  $g add -A && $g commit -qm "$msg" && $g push -q && echo "pushed: $msg"
+}
+
 # get: fuzzy-pick packages from pacman repos, AUR (when a query is given) and Flathub.
 # TAB multi-selects, ENTER installs each with the right tool.  Usage: get [query]
 get() {
