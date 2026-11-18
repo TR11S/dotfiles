@@ -54,8 +54,8 @@ fi
 # Picker over recent files, then the folders above (streams in, duplicates dropped)
 out=("${(@f)$( {
     print -rl -- $recent
-    $fd --type f --follow --hidden ${skip/#/--exclude=} . ${^roots}(N/)
-    $fd --type f --follow --hidden ${skip/#/--exclude=} --max-depth 1 . ${^shallow}(N/) } \
+    $fd --type f --follow --hidden --no-ignore-vcs ${skip/#/--exclude=} . ${^roots}(N/)
+    $fd --type f --follow --hidden --no-ignore-vcs ${skip/#/--exclude=} --max-depth 1 . ${^shallow}(N/) } \
   | awk '{ sub(/^\.\//, "") } !seen[$0]++ { print; fflush() }' \
   | fzf --scheme=path --query="$*" --print-query --expect=ctrl-n \
         --header='Enter: open · Ctrl+N: create new file' \

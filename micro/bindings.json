@@ -1,1 +1,6 @@
-{}
+{
+    "Alt-h": "CursorLeft",
+    "Alt-j": "CursorDown",
+    "Alt-k": "CursorUp",
+    "Alt-l": "CursorRight"
+}
