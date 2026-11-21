@@ -109,6 +109,7 @@ alias lt='eza --tree --level=2 --group-directories-first'   # tree view
 alias cat='bat -p --paging=never'                            # syntax-highlighted cat
 alias grep='grep --color=auto'
 alias c='clear'
+alias y='yazi'
 export MANPAGER="sh -c 'sed -u -e \"s/\\x1B\\[[0-9;]*m//g; s/.\\x08//g\" | bat -p -lman'"  # colored man pages (strip groff's own escapes first)
 
 # zoxide: `z foo` jumps to the best-matching frecent dir, `zi` picks with fzf
@@ -130,6 +131,10 @@ export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window=down:3:hidden:wrap 
 # Auto-ls: list the directory after every cd (capped so huge dirs don't flood the screen)
 _auto_ls() { eza --color=always --grid --width=$COLUMNS --group-directories-first . | head -n 30 }
 add-zsh-hook chpwd _auto_ls
+
+# Tell foot our cwd so Ctrl+Shift+N opens a new window here
+_osc7() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD" }
+add-zsh-hook chpwd _osc7; _osc7
 
 # edit: fuzzy-find & open any file in $HOME → ~/.local/bin/edit
 alias e='edit'
