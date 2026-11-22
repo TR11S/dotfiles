@@ -5,6 +5,7 @@ export EDITOR=micro
 export NNN_OPTS="eH"                  	# type-to-nav + show hidden files
 typeset -U path                      	# keep PATH free of duplicates
 path=(~/.pi/agent/bin ~/.local/bin $path)
+export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"	# systemd user ssh-agent.socket
 
 # --- Options -----------------------------------------------------------------
 setopt AUTO_CD                       	# type a directory name to cd into it
@@ -109,7 +110,6 @@ alias lt='eza --tree --level=2 --group-directories-first'   # tree view
 alias cat='bat -p --paging=never'                            # syntax-highlighted cat
 alias grep='grep --color=auto'
 alias c='clear'
-alias y='yazi'
 export MANPAGER="sh -c 'sed -u -e \"s/\\x1B\\[[0-9;]*m//g; s/.\\x08//g\" | bat -p -lman'"  # colored man pages (strip groff's own escapes first)
 
 # zoxide: `z foo` jumps to the best-matching frecent dir, `zi` picks with fzf
@@ -138,6 +138,15 @@ add-zsh-hook chpwd _osc7; _osc7
 
 # edit: fuzzy-find & open any file in $HOME → ~/.local/bin/edit
 alias e='edit'
+
+
+function y() { # yazi (with cd on quit)
+	local tmp cwd; tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+	command yazi "$@" --cwd-file="$tmp"
+	IFS= read -r -d '' cwd < "$tmp"
+	[ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd" || builtin true
+	command rm -f -- "$tmp"
+}
 
 # cfg: commit & push all ~/.config changes.  Usage: cfg [message]
 # Without a message, it names the changed dirs, e.g. "update: mango zsh".
