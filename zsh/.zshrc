@@ -6,6 +6,7 @@ export NNN_OPTS="eH"                  	# type-to-nav + show hidden files
 typeset -U path                      	# keep PATH free of duplicates
 path=(~/.pi/agent/bin ~/.local/bin $path)
 export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"	# systemd user ssh-agent.socket
+[[ -r ~/.secrets ]] && source ~/.secrets	# API keys (mode 600, not in git)
 
 # --- Options -----------------------------------------------------------------
 setopt AUTO_CD                       	# type a directory name to cd into it

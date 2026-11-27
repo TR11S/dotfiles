@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# ask: quick terminal questions via OpenRouter.  Usage: ask "how do I ..."
+# Setup: ask --help
+import json, os, sys, urllib.error, urllib.request
+
+# Edit these to match your setup
+MODEL = "@preset/ask"  # OpenRouter preset or model ID
+SYSTEM = ("You are on Arch Linux with zsh, Wayland, pacman and paru (AUR). "
+          "Help with simple terminal commands. Prefer pacman and preinstalled tools; "
+          "Be brief. Plain text only, no markdown.")
+
+HELP = """usage: ask "question"
+
+setup:
+  1. export OPENROUTER_API_KEY="..." in your shell environment
+  2. edit MODEL and SYSTEM at the top of this script"""
+
+question = " ".join(sys.argv[1:])
+if question in ("", "-h", "--help"):
+    sys.exit(print(HELP))
+key = os.environ.get("OPENROUTER_API_KEY") or sys.exit(f"ask: OPENROUTER_API_KEY is not set\n\n{HELP}")
+
+body = {
+    "model": MODEL,
+    "stream": True,
+    "messages": [{"role": "system", "content": SYSTEM},
+                 {"role": "user", "content": question}],
+}
+request = urllib.request.Request(
+    "https://openrouter.ai/api/v1/chat/completions",
+    data=json.dumps(body).encode(),
+    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+)
+
+answered = False
+try:
+    with urllib.request.urlopen(request, timeout=60) as response:
+        for line in response:  # server-sent events: "data: {json}"
+            if not line.startswith(b"data: ") or line.strip() == b"data: [DONE]":
+                continue
+            chunk = json.loads(line[6:])
+            if "error" in chunk:
+                sys.exit(f"\nask: {chunk['error']['message']}")
+            for choice in chunk.get("choices", []):
+                if text := choice.get("delta", {}).get("content"):
+                    print(text, end="", flush=True)
+                    answered = True
+except urllib.error.HTTPError as e:
+    sys.exit(f"ask: HTTP {e.code}: {e.read().decode(errors='replace')}\n(setup: ask --help)")
+except OSError as e:
+    sys.exit(f"\nask: {e}")
+except KeyboardInterrupt:
+    sys.exit(130)
+
+if not answered:
+    sys.exit("ask: empty response")
+print()

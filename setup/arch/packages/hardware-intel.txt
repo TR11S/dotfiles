@@ -1,0 +1,4 @@
+# Intel CPU/GPU + laptop audio firmware — skip this group on other hardware
+intel-ucode sof-firmware
+vulkan-intel intel-media-driver
+mesa-utils vulkan-tools libva-utils    # glxinfo, vulkaninfo, vainfo

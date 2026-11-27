@@ -1,0 +1,7 @@
+# Shells
+zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search fish
+# Everyday tools
+micro helix nnn yazi btop fzf fd ripgrep bat eza zoxide dust gum
+tealdeer navi glow chafa ddgr wikiman arch-wiki-docs
+# Fun
+fastfetch pfetch-rs cowsay lavat fetch-git

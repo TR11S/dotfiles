@@ -1,0 +1,14 @@
+[Unit]
+Description=LFM3-1.7B local LLM server (llama.cpp, CPU)
+Documentation=https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lfm3-server
+Restart=on-failure
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=default.target

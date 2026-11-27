@@ -1,0 +1,2 @@
+# Kill the biggest hog before the desktop freezes; never the session itself
+EARLYOOM_ARGS="-m 5 -s 10 -r 0 -n --avoid ^(mango|mangobar|foot|Xwayland|swaylock|systemd|sshd)$ --prefer ^(llama-server|firefox|Isolated.Web.Co|Web.Content)$"

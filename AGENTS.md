@@ -11,7 +11,7 @@
 ## Shell & tools
 - Interactive shell: **zsh** (`foot.ini` sets `shell=/usr/bin/zsh`). Login shell in passwd is bash;
 - `EDITOR=micro`; also nnn, btop, fzf, ripgrep, git.
-- `~/.secrets` (mode 600) holds API keys and is sourced by `.bashrc` only. Never read, print, or commit its contents.
+- `~/.secrets` (mode 600) holds API keys and is sourced by `.bashrc` and `zsh/.zshrc`. Never read, print, or commit its contents.
 
 ## Desktop stack
 - `foot` terminal (server mode), `fuzzel` launcher, `mangobar` bar, micro editor.
@@ -24,7 +24,7 @@
 - OOM: earlyoom (`/etc/default/earlyoom`); systemd-oomd disabled
 
 ## Local LLM
-- llama.cpp servers as user units:  llama-qwen35; model under `~/models/llama.cpp`; launch scripts in `~/.local/bin/qwen35{,-server}`.
+- llama.cpp servers as user units (start on demand): llama-qwen35 (:8081), llama-minicpm (:8080), llama-lfm3 (:8082); models under `~/models/llama.cpp`; launch scripts in `~/.local/bin/{qwen35,minicpm,lfm3}{,-server}`.
 
 ## Checks
 -  mango: `mango -p`; foot: `foot --check-config` (if asked to verify).
