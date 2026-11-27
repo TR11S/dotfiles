@@ -1,2 +1,2 @@
-# Dev + local LLM (llama.cpp servers, see ~/.config/systemd/user)
+# Dev + local LLM (llama.cpp)
 github-cli cmake rust uv llama-cpp opencode-beta

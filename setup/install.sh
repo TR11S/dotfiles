@@ -136,6 +136,8 @@ step_dotfiles() {
          'gsettings set org.gnome.desktop.interface color-scheme prefer-dark'
   ensure "create XDG user dirs (~/Documents, ~/Pictures, …)" \
          '[[ -f ~/.config/user-dirs.dirs ]]'     'xdg-user-dirs-update'
+  ensure "ssh-agent as a user socket (zshrc points SSH_AUTH_SOCK at it)" \
+         'systemctl --user is-enabled -q ssh-agent.socket'  'systemctl --user enable -q ssh-agent.socket'
 }
 
 # ── theme: wallust colors + matching GTK3 theme ──────────────────────────────
