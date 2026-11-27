@@ -10,7 +10,7 @@
 
 ## Shell & tools
 - Interactive shell: **zsh** (`foot.ini` sets `shell=/usr/bin/zsh`). Login shell in passwd is bash;
-- `EDITOR=micro`; also nnn, btop, fzf, ripgrep, git.
+- `EDITOR=micro`; also yazi, btop, fzf, ripgrep, git.
 - `~/.secrets` (mode 600) holds API keys and is sourced by `.bashrc` and `zsh/.zshrc`. Never read, print, or commit its contents.
 
 ## Desktop stack
@@ -33,3 +33,7 @@
 ## Repo
 - `~/.config` is a git repo with an allowlist `.gitignore` (add new dirs there explicitly). wallust outputs are not tracked.
 - `bin/` holds tracked scripts, symlinked into `~/.local/bin`.
+
+## Setup (/setup)
+- my post-install script (so I can  reproduce my setup on a new machine)
+- If a change adds a program a config needs, an `/etc` file or a service, update `setup/` too: the header of `setup/install.sh` says where.
