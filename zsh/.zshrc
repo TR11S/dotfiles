@@ -2,7 +2,6 @@
 
 # --- Environment -------------------------------------------------------------
 export EDITOR=micro
-export NNN_OPTS="eH"                  	# type-to-nav + show hidden files
 typeset -U path                      	# keep PATH free of duplicates
 path=(~/.pi/agent/bin ~/.local/bin $path)
 export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"	# systemd user ssh-agent.socket
