@@ -185,8 +185,6 @@ get() {
   (( $#flat ))   && flatpak install flathub $flat
 }
 
-# nnn: defines `n`, which cd's to nnn's last directory on quit
-[[ -r /usr/share/nnn/quitcd/quitcd.bash_sh_zsh ]] && source /usr/share/nnn/quitcd/quitcd.bash_sh_zsh
 
 # --- Plugins (fish built-ins: autosuggestions + syntax highlighting) --------
 # sudo pacman -S zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search

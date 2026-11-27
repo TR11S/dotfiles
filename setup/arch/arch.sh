@@ -1,24 +1,20 @@
 # arch.sh — Arch-only parts, sourced by install.sh (also used on Arch derivatives via ID_LIKE).
+# packages.txt = what the tracked configs need; packages-intel.txt is added on Intel CPUs.
 # Arch-only /etc files live in arch/etc/ (copied by the system step), e.g. the Limine hook.
 #
 # Plugin contract — a new distro's <distro>/<distro>.sh defines the same names:
 #   DISTRO_DESC          menu label for the distro extras step
 #   DISTRO_SERVICES=()   extra units the system step enables
-#   PKG_IGNORE=()        explicitly installed packages --diff shouldn't nag about
 #   pkg_missing PKG...   print the packages not installed yet        (read-only)
 #   pkg_is_aur PKG       true if PKG is not in the official repos     (read-only)
-#   pkg_explicit         print all explicitly installed packages      (read-only, for --diff)
 #   pkg_install PKG...   install packages
 #   distro_step          ensure lines, like any step in install.sh
 
 DISTRO_DESC="Arch extras: pacman.conf (color, parallel downloads)"
 DISTRO_SERVICES=(paccache.timer)   # weekly cache cleanup (keeps 3 versions)
-# Installed by the Arch installer or by pkg_install itself, so not in packages/*.txt
-PKG_IGNORE=(base linux linux-firmware mkinitcpio limine efibootmgr nano sudo reflector paru paru-debug)
 
 # ── Packages ─────────────────────────────────────────────────────────────────
 pkg_missing()  { (( $# )) || return 0; pacman -T "$@" || true; }
-pkg_explicit() { pacman -Qqe; }
 _repo=
 pkg_is_aur()   { [[ -n $_repo ]] || _repo=$(pacman -Slq); ! grep -qxF "$1" <<<"$_repo"; }
 

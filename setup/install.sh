@@ -7,15 +7,15 @@
 #   ./install.sh --diff           read-only: what's on THIS machine but not in the setup yet
 #
 # ── Maintaining: most changes are data, not code ─────────────────────────────
-#   New package ...... add the name to a <distro>/packages/*.txt (new file = new menu group)
-#   New Flathub app .. add the ID to common/flatpak.txt
+#   New package ...... only if a tracked config or script needs it: add it to <distro>/packages.txt
+#                      (everything else, apps and Flatpaks included, you install by hand)
 #   New /etc file .... cp /etc/foo/bar common/etc/foo/bar   (distro-only: <distro>/etc/foo/bar)
 #   New service ...... add it to SERVICES below             (distro-only: DISTRO_SERVICES)
 #   New script ....... put it in ~/.config/bin — it gets linked automatically
 #   New config dir ... allow it in ~/.config/.gitignore — it comes with the repo
 #   Anything else .... one `ensure` line in the matching step_* function (see below),
-#                      e.g. a gsettings key or a uv tool (examples in step_dotfiles / step_apps)
-#   New desktop/WM ... edit <distro>/packages/desktop.txt; drop step_theme if you drop wallust
+#                      e.g. a gsettings key (example in step_dotfiles)
+#   New desktop/WM ... edit the Desktop part of <distro>/packages.txt; drop step_theme if you drop wallust
 #   New step ......... write step_foo(), add foo to STEPS and DESC at the bottom
 #   Not sure? ........ run ./install.sh --diff after changing your system
 # Removing a name from a list never uninstalls anything; it just stops installing it.
@@ -36,7 +36,7 @@ TIMEZONE=Europe/Berlin
 LOCALE=en_US.UTF-8
 KEYMAP=de
 # System units enabled at boot (nothing is started now: reboot after).
-SERVICES=(NetworkManager nftables systemd-timesyncd tailscaled earlyoom tlp tlp-pd greetd
+SERVICES=(NetworkManager nftables systemd-timesyncd earlyoom tlp tlp-pd greetd
           fstrim.timer snapper-timeline.timer snapper-cleanup.timer)
 # --diff ignores these enabled units (pulled in automatically by NetworkManager)
 UNITS_IGNORE=(NetworkManager-dispatcher.service NetworkManager-wait-online.service)
@@ -64,7 +64,7 @@ list() { sed 's/#.*//' "$@" | grep -oE '\S+' || true; }      # names from list f
 sec()  { local out; out=$(cat); [[ -z $out ]] || { gum style --bold --foreground 212 "$1"; sed 's/^/  /' <<<"$out"; }; }
 
 # ── Distro plugin: <distro>/<distro>.sh (contract documented in arch/arch.sh) ──
-DISTRO= DISTRO_SERVICES=() PKG_IGNORE=() PKG_GROUPS=()
+DISTRO= DISTRO_SERVICES=()
 read -ra ids < <(. /etc/os-release; echo "$ID ${ID_LIKE:-}")   # e.g. "endeavouros arch"
 for id in "${ids[@]}"; do [[ -f $HERE/$id/$id.sh ]] && { DISTRO=$id; break; }; done
 if [[ -n $DISTRO ]]; then
@@ -82,30 +82,17 @@ command -v gum >/dev/null || { echo "Installing gum (needed for the menu)…"; p
 # ── distro: extras from <distro>/<distro>.sh ─────────────────────────────────
 step_distro() { distro_step; }
 
-# ── packages: groups picked after the menu ───────────────────────────────────
-pkgs_wanted() { local g; for g in "${PKG_GROUPS[@]}"; do list "$HERE/$DISTRO/packages/$g.txt"; done; }
+# ── packages: what the configs need (+ Intel extras on Intel CPUs) ────────────
+pkgs_wanted() {
+  list "$HERE/$DISTRO/packages.txt"
+  if grep -q GenuineIntel /proc/cpuinfo; then list "$HERE/$DISTRO/packages-intel.txt"; fi
+}
 repo_todo()   { local p; for p in $(pkg_missing $(pkgs_wanted)); do pkg_is_aur "$p" || echo "$p"; done; }
 aur_todo()    { local p; for p in $(pkg_missing $(pkgs_wanted)); do pkg_is_aur "$p" && echo "$p"; done; return 0; }
 
 step_packages() {
   ensure_each "install from repos (with full system upgrade)" repo_todo pkg_install
   ensure_each "build from AUR — paru asks you to review each" aur_todo  pkg_install
-}
-
-# ── apps: Flathub + uv tools (any distro) ────────────────────────────────────
-flatpak_todo() {
-  local have=; command -v flatpak >/dev/null && have=$(flatpak list --app --columns=application)
-  list "$HERE/common/flatpak.txt" | grep -vxF -f <(echo "$have") || true
-}
-flatpak_install() {
-  command -v flatpak >/dev/null || { note "flatpak not installed — skipped"; return 0; }
-  sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-  sudo flatpak install -y --noninteractive flathub "$@"
-}
-step_apps() {
-  ensure_each "Flathub apps" flatpak_todo flatpak_install
-  ensure "uv tool: huggingface-hub (hf CLI)" \
-         'uv tool list | grep -q "^huggingface-hub "'  'uv tool install -q huggingface-hub'
 }
 
 # ── dotfiles: ~/.config repo, shell init, dark mode, XDG dirs ────────────────
@@ -228,19 +215,10 @@ reminders() {
   remind "copy ~/.ssh, then: git -C ~/.config remote set-url origin git@github.com:TR11S/dotfiles.git" \
          'compgen -G "$HOME/.ssh/id_*"'
   remind "fill ~/.secrets (API keys)"            '[[ -s ~/.secrets ]]'
-  remind "copy ~/models (llama.cpp / sd models)" '[[ -d ~/models ]]'
 }
 
 # ── --diff: what this machine has that the setup doesn't know about ──────────
 diff_report() {
-  if [[ -n $DISTRO ]]; then
-    comm -23 <(pkg_explicit | sort -u) <({ list "$HERE/$DISTRO/packages/"*.txt; printf '%s\n' "${PKG_IGNORE[@]}"; } | sort -u) \
-      | sec "Installed but in no list → add to $DISTRO/packages/*.txt (or PKG_IGNORE in $DISTRO.sh)"
-  fi
-  if command -v flatpak >/dev/null; then
-    comm -23 <(flatpak list --app --columns=application | sort -u) <(list "$HERE/common/flatpak.txt" | sort -u) \
-      | sec "Flatpaks not in common/flatpak.txt"
-  fi
   # enabled units whose vendor preset is "disabled" = enabled by you
   comm -23 <(systemctl list-unit-files --state=enabled --no-legend | awk '$3=="disabled"{print $1}' | sort -u) \
            <(printf '%s\n' "${SERVICES[@]}" "${DISTRO_SERVICES[@]}" "${UNITS_IGNORE[@]}" | sed '/\./!s/$/.service/' | sort -u) \
@@ -256,13 +234,12 @@ diff_report() {
 }
 
 # ════════════════════════════════════════════════════════════════════════════
-# Main: choose → ask → summary → y/n → apply
+# Main: choose → summary → y/n → apply
 # ════════════════════════════════════════════════════════════════════════════
-STEPS=(distro packages apps dotfiles theme scripts system)   # menu and apply order
+STEPS=(distro packages dotfiles theme scripts system)   # menu and apply order
 declare -A DESC=(
   [distro]="${DISTRO_DESC:-}"
-  [packages]="Packages: groups from $DISTRO/packages/"
-  [apps]="Apps: Flathub + uv tools"
+  [packages]="Packages: what the configs need ($DISTRO/packages.txt)"
   [dotfiles]="Dotfiles: ~/.config repo, zsh/bash init, dark mode, XDG dirs"
   [theme]="Theme: wallust colors + matching GTK3 theme"
   [scripts]="Scripts: link ~/.config/bin into ~/.local/bin"
@@ -289,13 +266,7 @@ fi
 (( ${#picked[@]} )) || { echo "Nothing selected."; exit 0; }
 sudo -v
 
-# 2. Package groups — asked now, so nothing interrupts the apply phase (except paru reviews)
-if chosen packages; then
-  mapfile -t PKG_GROUPS < <(cd "$HERE/$DISTRO/packages" && ls -- *.txt | sed 's/\.txt$//')
-  (( YES )) || mapfile -t PKG_GROUPS < <(gum choose --no-limit --selected='*' --header "Package groups" "${PKG_GROUPS[@]}")
-fi
-
-# 3. Summary (plan mode: read-only)
+# 2. Summary (plan mode: read-only)
 echo; todo=()
 for s in "${STEPS[@]}"; do
   chosen "$s" || continue
@@ -307,10 +278,10 @@ reminders | sec "Manual, not done by this script"
 echo
 (( ${#todo[@]} )) || { gum style --foreground 42 "Nothing to do."; exit 0; }
 
-# 4. Confirm
+# 3. Confirm
 (( YES )) || gum confirm "Apply these changes?" || { echo "Nothing changed."; exit 0; }
 
-# 5. Apply
+# 4. Apply
 MODE=apply
 for s in "${todo[@]}"; do
   gum style --bold --foreground 212 "▶ ${DESC[$s]}"

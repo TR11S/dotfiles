@@ -252,7 +252,7 @@ bt_pair() {
 sound_menu() {
   have pactl || { notify "Sound" "pactl not found — install libpulse (and pipewire-pulse)"; return; }
   while true; do
-    local vol mute mic choice
+    local vol mute mic choice mixer
     vol=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oE '[0-9]+%' | head -n1)
     mute=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | awk '{print $2}')
     mic=$(pactl get-source-mute @DEFAULT_SOURCE@ 2>/dev/null | awk '{print $2}')
@@ -263,7 +263,8 @@ sound_menu() {
       "Output device…"
       "Input device…"
     )
-    have pavucontrol && items+=("Open mixer")
+    mixer=(pavucontrol); have pavucontrol || mixer=(flatpak run org.pulseaudio.pavucontrol)   # native or Flatpak
+    { have pavucontrol || flatpak info org.pulseaudio.pavucontrol &>/dev/null; } && items+=("Open mixer")
     items+=("$BACK")
 
     choice=$(pick "Sound" "${items[@]}") || return
@@ -273,7 +274,7 @@ sound_menu() {
       *microphone)       pactl set-source-mute @DEFAULT_SOURCE@ toggle ;;
       "Output device…")  audio_device sink ;;
       "Input device…")   audio_device source ;;
-      "Open mixer")      setsid -f pavucontrol >/dev/null 2>&1; exit 0 ;;
+      "Open mixer")      setsid -f "${mixer[@]}" >/dev/null 2>&1; exit 0 ;;
       "$BACK")           return ;;
     esac
   done

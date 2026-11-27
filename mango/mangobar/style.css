@@ -7,7 +7,7 @@
 
 /* ==================== Reset: flat, no pills ==================== */
 * {
-    font-family: "Maple Mono NF CN", "Symbols Nerd Font Mono", monospace;
+    font-family: "Terminess Nerd Font", "Symbols Nerd Font Mono", monospace;
     font-size: 13px;
     font-weight: normal;
     color: @fg;

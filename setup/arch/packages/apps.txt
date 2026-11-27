@@ -1,4 +1,0 @@
-firefox qutebrowser torbrowser-launcher mpv newsboat flatpak
-# File manager + thumbnails + archives
-thunar gvfs tumbler ffmpegthumbnailer poppler-glib gnome-epub-thumbnailer xarchiver
-godot pureref edamame-bin

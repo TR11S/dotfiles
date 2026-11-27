@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Critical mako notification when the battery drops to LOW% while discharging.
+# Fires once per discharge; the notification is dismissed when the charger is
+# plugged in. Started from mango via exec_once.
+# Overrides: BATTERY_LOW (percent), BATTERY_INTERVAL (seconds)
+set -uo pipefail
+
+BAT=/sys/class/power_supply/BAT0
+LOW="${BATTERY_LOW:-10}"
+INTERVAL="${BATTERY_INTERVAL:-300}"
+id=""
+
+while true; do
+  cap=$(<"$BAT/capacity")
+  status=$(<"$BAT/status")
+
+  if [[ $status == Discharging ]]; then
+    if [[ -z $id ]] && (( cap <= LOW )); then
+      id=$(notify-send -p -u critical -a battery "Battery low" "${cap}% remaining — plug in the charger")
+    fi
+  elif [[ -n $id ]]; then
+    makoctl dismiss -n "$id" 2>/dev/null
+    id=""
+  fi
+
+  sleep "$INTERVAL"
+done

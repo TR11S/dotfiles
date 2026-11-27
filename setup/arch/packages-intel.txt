@@ -1,0 +1,2 @@
+# Intel CPU/GPU + laptop audio firmware (added automatically on Intel CPUs)
+intel-ucode sof-firmware vulkan-intel intel-media-driver

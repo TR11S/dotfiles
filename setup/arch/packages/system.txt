@@ -1,6 +1,0 @@
-# Core tools and system services
-base-devel git man-db pacman-contrib openssh
-btrfs-progs dosfstools exfatprogs unzip smartmontools snapper
-zram-generator earlyoom
-networkmanager wpa_supplicant wireless-regdb nftables tailscale
-tlp tlp-rdw tlp-pd          # tlp-pd provides powerprofilesctl for fuzzel-settings

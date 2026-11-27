@@ -1,0 +1,15 @@
+# Only what the tracked configs, scripts and setup steps need. Apps: install by hand.
+# System (services the system step enables, tools the configs call)
+base-devel git man-db pacman-contrib openssh python flatpak
+btrfs-progs snapper zram-generator earlyoom
+networkmanager wireless-regdb nftables tlp tlp-rdw tlp-pd   # tlp-pd: powerprofilesctl in fuzzel-settings
+# Desktop: compositor, bar, session, tools called from mango/fuzzel-settings
+mangowm-git mangobar-git greetd greetd-tuigreet swayidle swaylock
+xdg-desktop-portal-wlr xdg-desktop-portal-gtk xdg-user-dirs
+foot fuzzel mako libnotify systembus-notify awww wallust swayimg
+grim slurp wl-clipboard brightnessctl wlsunset
+pipewire pipewire-alsa pipewire-pulse wireplumber libpulse rtkit
+adw-gtk-theme noto-fonts ttf-dejavu ttf-nerd-fonts-symbols-mono ttf-terminus-nerd terminus-font
+# Shell: zsh + what .zshrc and bin/edit use, editors with a tracked config
+zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search
+micro helix yazi btop fzf fd bat eza zoxide
